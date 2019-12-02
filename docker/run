@@ -1,0 +1,24 @@
+#!/bin/bash
+/usr/bin/python -u /opt/optimizations/warmup.py
+
+: ${DATABASE_NAME:="dohko"}
+: ${DATABASE_USERNAME:="dohko"}
+: ${DATABASE_PASSWORD:="znntSsYTV+6HN3fmueF9QxKtX/ooBTzvRubWMAKevFY="}
+: ${JDBC_DRIVER_CLASS:="com.mysql.jdbc.Driver"}
+: ${JDBC_DATABASE_URL:="jdbc:mysql://localhost:3306/$DATABASE_NAME"}
+
+: ${DEBUGGING_PORT:=8000}
+
+export PATH=${JAVA_HOME}/bin:$PATH
+
+java -Xdebug -agentlib:jdwp=transport=dt_socket,server=y,address=${DEBUGGING_PORT},suspend=n \
+     -cp target/excalibur-job-1.1.0-SNAPSHOT.jar \
+     -Duser.timezone=UTC \
+     -Dorg.excalibur.jdbc.driver.class.name=${JDBC_DRIVER_CLASS} \
+     -Dorg.excalibur.jdbc.url=${JDBC_DATABASE_URL} \
+     -Dorg.excalibur.jdbc.username=${DATABASE_USERNAME} \
+     -Dorg.excalibur.jdbc.password=${DATABASE_PASSWORD} \
+     -Dorg.excalibur.database.initialize=true \
+     org.springframework.boot.loader.JarLauncher
+
+# -Xrunjdwp:server=y,transport=dt_socket,address=4000,suspend=n \

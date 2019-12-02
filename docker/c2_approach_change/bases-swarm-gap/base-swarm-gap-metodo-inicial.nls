@@ -1,0 +1,21 @@
+;; ---------------------------------------------------
+;; ----- ALGORITMO SWARM-GAP ORIGINAL ----------------
+;; ---------------------------------------------------
+
+
+;; ---------------------------------------------------
+;; ---- Métodos para atribuição das tarefas ----------
+;; ---------------------------------------------------
+;; return an UAV not visited to be operated
+
+to-report swarm-GAP
+  let i 0
+
+  if (length uavs-unvisited > 0) [ ;; Só passa pelos agentes uma única vez
+     set i one-of uavs-unvisited
+     choose_task i ;;select a task to be performed
+     set uavs-unvisited remove i uavs-unvisited
+  ]
+  
+  report i
+end

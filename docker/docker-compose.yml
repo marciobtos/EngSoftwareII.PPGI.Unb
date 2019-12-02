@@ -1,0 +1,89 @@
+version: '2.2'
+services:
+  dsm-storage-mongo:
+    image: "mongo"
+    ports:
+     - "27017:27017"
+    volumes:
+     - /data/db:/C/temp/mongo2    
+    cpuset: ${CPUSET}
+  dsm-storage-api:
+    image: "eneiascs/dsm-storage-api"
+    ports:
+     - "8090:8080"
+    depends_on:
+      - 'dsm-storage-mongo'
+    environment:
+      - DATABASE_URI=${DATABASE_URI}
+    cpuset: ${CPUSET}
+  dsm-r-base-api:
+    image: "eneiascs/dsm-r-base-api"
+    ports:
+     - "8091:8080"
+    volumes:
+     - ${WORKSPACE_PATH}:${R_BASE_PATH}
+    environment:
+     - BASE_PATH=${R_BASE_PATH}
+    cpuset: ${CPUSET}
+  dsm-framework:
+    image: "eneiascs/dsm-framework:1.0.0"
+    ports:
+     - "80:8080"
+     - "10001:10001"
+    volumes:
+     - ${WORKSPACE_PATH}:${FRAMEWORK_BASE_PATH}
+    depends_on:
+      - 'dsm-storage-mongo'
+      - 'dsm-r-base-api'
+    environment:
+      - DATABASE_URI=http://dsm-storage-api:8080/api
+      - DATABASE_NAME=experiments
+      - DOHKO_ADDRESS=dohkojob:8080
+      - R_BASE_URL=http://dsm-r-base-api:8080/r-base/command
+      - BASE_PATH=${FRAMEWORK_BASE_PATH}
+    mem_limit: 4g
+    cpuset: ${CPUSET}
+  mysqldata:
+     image: busybox:1.27
+     container_name: mysql-data
+     command: "echo Data-only container for MySQL"
+     volumes:
+       - /var/lib/mysql
+     security_opt:
+       - no-new-privileges
+     cpuset: ${CPUSET}
+  mysql:
+    image: mysql:5.7
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "MevgXuuNIP4Vgs+YtTyq6A71KnZSzsZJgCF1ynDT1GM="
+      MYSQL_DATABASE: dohko
+      MYSQL_USER: dohko
+      MYSQL_PASSWORD: "znntSsYTV+6HN3fmueF9QxKtX/ooBTzvRubWMAKevFY="
+    ports:
+      - "3306:3306"
+    volumes_from:
+      - mysqldata
+    security_opt:
+      - no-new-privileges
+    cpuset: ${CPUSET}
+
+  dohkojob:
+    image: dohko-netlogo
+    container_name: dohko-job
+    environment:
+      JDBC_DATABASE_URL: "jdbc:mysql://mysql:3306/dohko"
+    ports:
+      - 3300:8080
+      - 8001:8000
+    working_dir: /opt/dohko/job
+    command: /bin/bash -c "/opt/dohko/job/run"
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+    depends_on:
+      - 'mysql'      
+    security_opt:
+      - no-new-privileges
+    mem_limit: 4g
+    memswap_limit: 4g
+    cpuset: ${DOHKO_CPUSET}

@@ -1,0 +1,635 @@
+; use matrix extensions
+extensions [matrix profiler]
+
+globals[
+  quality-sensors ;; Cada sensor tem sua qualidade para determinados alvos
+
+  ;; -----------------------------------------------------------
+  ;; ---- Variáveis que estariam dentro do token da missão -----
+  ;; -----------------------------------------------------------
+  uavs-unvisited ; Agentes que ainda não foram visitados
+  uavs-no-energy ; Agentes que se declararam como sem energia para realizar qualquer uma dsas tarefas do token
+  ;; -----------------------------------------------------------
+  
+
+  ;; para controle de várias execuções seguidas:
+  terminou
+  nome-algoritmo
+  
+  ;timer_custo
+
+  ;; Variáveis para avaliação (mensurar: comunicação, tempo, etc.)
+  count-cominicacao
+  ;count-comunic-com-locacao
+  
+  ;ticks-last-completed-task ;; tempo até a última tarefa concluída 
+  count-drop
+  uavs-dropped
+  finished_tasks
+  ;log_run;
+  c2_strategy
+  signal
+  
+]
+breed[no-leaders uav]
+breed[tasks taskj]
+breed[uavs  uav]
+
+tasks-own [a rc s           ;; Tipo de alvo, recurso consumido, estimulo
+           timeout alpha    ;; tempo de vida, alpha (peso para distância e qualidade)
+           responsibleAgent ;; agente responável pela execução
+           completed       ;; tarefa concluída (boolean)
+           ;; Somente para testes:
+           rc_estimado ;;  rc + deslocamento
+           deslocado   ;; deslocamento - incrementado quando o agente está se movendo em direção a tarefa.
+           recompensa  ;; para calcular a recompensa total (funcao objetivo)
+           ]
+
+uavs-own  [resource         ;; Recurso dispoínel
+           sensors          ;; sensores
+           tasksToDo        ;; Tarefas alocadas para o agente (a fazer)
+           taskDoing        ;; Tarefa que esta fazendo
+           taskDoingTime    ;; Tempo que falta para ele concluir a tarefa. Assim que o agente chega na tarefa ele precisa realizar ela. passar o tempo necessário (rc da tarefa) em cima dela
+           completedTasks   ;; Tarefas concluidas
+           lastX lastY      ;; Ultima posição x e y (da ultima tarefa alocada)
+           estimated_cost   ;; Gasto de recurso agendado (previsto)
+           lider            ;; added by Junier
+           tokens           ;; added by Junier 
+          ]
+
+;; ------------------------------------------------------
+;;        Testes 
+;; ------------------------------------------------------
+to test_setup_configurado
+  ;; Só para criar cenário random...
+  
+  
+  ;let x 100
+  ;let y 80
+  ;let quant_uavs 3
+  ;let quant_tarefas 32
+  
+  ;let x 200
+  ;let y 160
+  ;let quant_uavs 6
+  ;let quant_tarefas 64
+
+  ;let x 300
+  ;let y 240
+  ;let quant_uavs 9
+  ;let quant_tarefas 96
+  
+  ;; criando cenário para testar escalabilidade:
+  ;let x 750
+  ;let y 750
+  ;let quant_uavs 100
+  ;let quant_tarefas 500
+
+  let x 750
+  let y 750
+  let quant_uavs 200
+  let quant_tarefas 1000  
+
+
+  setup_base x y
+  setup-uavs-fixed get_uavs_random quant_uavs
+  setup-task-fixed count uavs get_tasks_random quant_tarefas
+
+  ;; só para ver os que cada vant pode fazer
+  ;ask uavs[
+  ;  let i self
+  ;  ask tasks [
+  ;    let maxQia compute_quality i a
+  ;    let t self
+  ;    if maxQia > 0 [ ask i [ create-link-with t ]  ]
+  ;  ]
+  ;]
+end
+
+to test_setup_configurado_antigo
+  ;setup_configurado 4 0.2 0 300 6 ;; tarefas não aleatórias
+
+  setup_configurado 64 0.6 1 300 9 200 160 [] [];; tarefas aleatórias
+  
+  ;; só para ver os que cada vant pode fazer
+  ask uavs[
+    let i self
+    ask tasks [
+      let maxQia compute_quality i a
+      let t self
+      if maxQia > 0 [ ask i [ create-link-with t ]  ]
+    ]
+    
+  ]
+end
+
+
+;; inicializa os VANTs
+to init_uavs [energia_uav quant_uavs aleatoria lista_ini]
+  
+  ifelse aleatoria = 0 [
+    ifelse quant_uavs = 3 [setup-uavs-fixed get_uavs3]
+       [ifelse quant_uavs = 6 [setup-uavs-fixed get_uavs6]
+           [ifelse quant_uavs = 9 [setup-uavs-fixed get_uavs9]
+             [setup-uavs-fixed get_uavs_random quant_uavs]
+            ]
+        ]
+   ][
+      ifelse aleatoria = 1
+      [setup-uavs-fixed get_uavs_random quant_uavs]
+      [setup-uavs-fixed lista_ini]
+     ]
+
+  ;; Carrega os vants com a energia informada
+  ask uavs[ 
+    set resource energia_uav 
+    set label (word "s: " sensors " r: " resource)
+  ]
+  
+end
+
+
+
+to init_tasks [quant_tarefas estimulo aleatoria lista_inicial]
+  ;; Inicializando as tarefas:
+  let list_tasks []
+  
+  ifelse aleatoria = 0
+     [ ifelse quant_tarefas = 4 [set list_tasks get_tasks_4 ]
+          [ ifelse quant_tarefas = 8 [set list_tasks get_tasks_8 ]
+            [ ifelse quant_tarefas = 16 [ set list_tasks get_tasks_16 ]
+              [ifelse quant_tarefas = 32 [set list_tasks get_tasks_32]
+                [ifelse quant_tarefas = 64 [set list_tasks get_tasks_64 ]
+                  [set list_tasks get_tasks_96]
+                ]
+              ]   
+            ]
+          ]
+        ]
+     [ifelse aleatoria = 1
+          [set list_tasks get_tasks_random quant_tarefas]
+          [
+            ;print "criar tarefas uma vez e usar repetidas vezes?"
+            set list_tasks lista_inicial
+            ;print list_tasks
+            ]
+      ]
+  
+  setup-task-fixed count uavs list_tasks ;; inicializa as tarefas
+  
+  ask tasks [
+    set s estimulo
+    set recompensa 0 ;; zerar a recompensa de todas
+    ;set label (word "id: " who " a: " a " s: " s)
+    set label (word " a: " a)
+  ]
+end
+
+;; Este setup é usado nas execuções sequenciais.
+;; Procedure chamada pelo arquivo relatorio.nls
+;;lista_inicial_tarefas e lista_ini_uav chegam vazias inicialmente
+to setup_configurado [quant_tarefas estimulo aleatoria energia_uav quant_uavs x y lista_inial_tarefas lista_ini_uav] ; x y tamanho do cenário
+  
+  setup_base x y
+  
+  init_uavs energia_uav quant_uavs aleatoria lista_ini_uav;; inicialização dos VANTs - a energia_uav define quantos ticks teremos para execucao
+  init_tasks quant_tarefas estimulo aleatoria lista_inial_tarefas;; Inicialização de tarefas precisa ser depois dos vants, por causa da numeracao de ID
+  
+  fill-uavs-unvisited ;; Carrega lista de Agentes não visitados
+  inicio-local ;; cada algoritmo faz as suas particularidades
+  reset-ticks
+end
+
+to setup
+  setup_base 100 80
+  
+  setup-uavs-fixed get_uavs;; inicializa os VANTs
+  setup-task-fixed count uavs get_tasks[1] ;; inicializa as tarefas
+  
+  print "OK"
+  
+  fill-uavs-unvisited ;; Carrega lista de Agentes não visitados
+
+  inicio-local ;; cada algoritmo faz as suas particularidades
+
+  reset-ticks
+end
+
+to setup_base [ x y]
+  clear-all ;Combines the effects of clear-globals, clear-ticks, clear-turtles, clear-patches, clear-drawing, clear-all-plots, and clear-output.
+  ;set log_run ""
+  
+  set uavs-no-energy [] ; Lista de agentes sem energia inicia vazia
+  
+  set count-cominicacao 0
+  ;set count-comunic-com-locacao 0
+  ;set ticks-last-completed-task 0
+  ;set timer_custo 0
+
+  create-scenario x y;; define cor de fundo e tamanho da janela
+  set-quality-sensors ;; define a qualidade dos sensores existentes
+end
+
+to go
+  
+  ;; Quando parar:
+  ;print word "#uavs resource => " (count uavs with [resource > 0])
+  ;print word "#tasks completed => " (count tasks with [completed = true])
+  ;print word "#uavs unvisited => " (length uavs-unvisited )
+  ;print word "#tasks sem UAV => " (count tasks with [responsibleAgent = false])
+  ;print "=========================" 
+  
+  
+  if ((remainder ticks 100) = 0)[
+    ;print word "C2 Strategy => " c2_strategy
+  ]
+     
+    
+  ;;aleatoriamente muda a estrategia de C2
+  if (ticks = signal)[
+    ifelse (c2_strategy = "ring")[
+      set c2_strategy "star"
+    
+      ;; Define a lider
+      set-lider;
+  
+      ;;Send status info to the lider
+      update-lider-info
+    
+      clean_tasks
+  ;;testing
+  ;;ask uavs with [lider = 1][
+  ;;  show length tokens
+  ;;]
+    ][
+    set c2_strategy "ring"
+    clean_tasks
+    fill-uavs-unvisited
+  ]
+  ]
+  
+  let dinamico false;
+  let custom false;
+  let lim 96
+  
+  if ( count uavs with [resource > 0] = 0) ;; Recursos esgotados
+     or (count tasks with [completed = false] = 0) ;; OU Todas as tarefas concluídas
+     or ((length uavs-unvisited = 0) and (count tasks with [responsibleAgent != false and completed = false] = 0))
+     ;or ((count tasks with [completed = true] = count tasks with [responsibleAgent != false]) and (count tasks with [completed = true] > 0))
+     or ((count tasks with [completed = true] = lim))
+   [
+       report-final
+       set terminou true
+       stop
+    ]
+  
+  
+  if ((count tasks with [responsibleAgent = false] > 0) and ;; se ainda tem tarefa para alocar
+      (length uavs-unvisited > 0) ) [ ;; e existe agentes não visitados
+      
+      set count-cominicacao (count-cominicacao + 1)
+      aloca 
+      
+  ] 
+  
+  move
+  tick
+  
+  
+  ;;JUNIER
+  if dinamico [
+    let ttd (round (300 / (count uavs))) ;Time to Drop
+    if (((remainder ticks ttd) = 0) and (count-drop <= (count uavs) - 1))[
+      ifelse custom [
+        remove_drone_customized
+      ][
+      remove_drone
+      ]
+    ]
+  ]
+  ;;FIM
+  
+end
+
+;;update all information from entities to the lider
+;;uses a structure (array) to store the UAVs
+to update-lider-info
+  ask uavs with [lider = 1][   
+    set tokens (list-no-leaders)
+  ]
+end
+
+
+;;JUNIER
+to remove_drone
+  let i one-of uavs 
+  while [member? i uavs-dropped][
+    set i one-of uavs 
+  ]
+  set count-drop (count-drop + 1)
+  ;print word "UAV abatido" i
+  ;print word "# ABATIDOS ->" count-drop
+  ;print word "EM " ticks
+  ask i[
+    set color red
+    set resource 0
+    set taskDoing 0   
+    set estimated_cost 0
+  ]
+  set uavs-no-energy lput i uavs-no-energy
+  fill-uavs-unvisited
+  ask tasks with [responsibleAgent = i][
+     set responsibleAgent false
+     set alpha .6
+  ]
+end
+;;FIM
+
+
+;;JUNIER CUSTOM
+;;É NECESSARIO DEVOLVER AS TAREFAS QUE ESTAO AGUARDANDO SER EXECUTADAS PARA VERIFICAR SE É O CASO
+;;DE TROCAR COM ALGUMA TAREFA QUE SURGIU POR REMOÇAO DE DRONE
+to remove_drone_customized
+  let i one-of uavs 
+  while [member? i uavs-dropped][
+    set i one-of uavs 
+  ]
+  set count-drop (count-drop + 1)
+  ;print word "UAV abatido" i
+  ;print word "# ABATIDOS ->" count-drop
+  ;print word "EM " ticks
+  ask i[
+    set color red
+    set resource 0
+    set taskDoing 0   
+    set tasksToDo []
+    set estimated_cost 0
+    ask my-links[
+       hide-link 
+    ]
+  ]
+  ;set uavs-no-energy lput i uavs-no-energy
+  
+  ;Remove todas as tarefas do drone abatido
+  ask tasks with [responsibleAgent = i and completed = false][
+     set responsibleAgent false 
+     set alpha .6
+  ]
+  
+  set uavs-dropped lput i uavs-dropped
+  set uavs-no-energy uavs-dropped
+
+
+;;;;;;;;;;;;;;;;
+
+  ;; Libera as tarefas dos UAVs com exceçao da tarefa que já esta a caminho de execucao
+  ask uavs with [not member? self uavs-dropped][
+    let toDo tasksToDo
+    let do taskDoing
+    let ag self
+    let value 0
+    let lines my-links
+    set tasksToDo []
+    set estimated_cost 0
+    ask lines [ ask self [ hide-link ] ]
+    if do != 0 [
+       let l link-with do
+       ask l [ show-link]
+    ]
+    ask tasks with [member? self toDo and completed = false and responsibleAgent = ag][
+     set responsibleAgent false
+     set alpha .6
+     ]
+    ask tasks with [completed = true and responsibleAgent = ag][
+        set value (value + rc_estimado) 
+    ]
+    set estimated_cost value
+  ]
+  
+  ;ask tasks with [responsibleAgent = false][
+  ;  let l link-with self
+  ;     if (is-link? l) [
+  ;      ask l [ hide-link ] ;; Escondendo o link, para não ficar a linha perdida
+   ;    ]
+  ;]
+  
+  
+  
+  ;ask tasks with [completed = false][
+   
+  ;  if uavs with [taskDoing = self] = [][
+  ;    print word "-----" self
+  ;    set responsibleAgent false
+  ;    set alpha .6
+  ;    print self
+  ;  ]
+  ;]
+    
+  
+  
+    
+  ;ask uavs with [not member? self uavs-dropped][
+    ;set estimated_cost 0
+    ;let ag self
+    ;ask completedTasks with [responsibleAgent = ag][
+    ;  ask a [ set estimated_cost (estimated_cost + rc_estimado)]
+    ;]
+    ;ask taskDoing [set responsibleAgent self]
+    
+    ;foreach tasksToDo [
+    ;  let l link-with ?
+    ;   if (is-link? l) [
+     ;   ask l [ hide-link ] ;; Escondendo o link, para não ficar a linha perdida
+     ;  ]
+    ;]
+    ;set tasksToDo []
+    ;let l link-with taskDoing 
+    ;if (is-link? l) [ ask l [show-link ]]
+  ;]
+  
+  ;set uavs-no-energy []
+  
+  fill-uavs-unvisited
+  
+   
+end
+;;FIM
+
+
+
+
+
+;; ------------------------------------------------
+;; --  Select a lider randomly                   --
+;; ------------------------------------------------
+to set-lider
+  if ( count uavs with [lider = 1] = 0) [
+    let i one-of uavs 
+    ask i [
+      set color blue
+      set lider 1
+    ]
+  ]
+end 
+
+
+;; ------------------------------------------------
+;; ---- Limpar lista de tarefas disponiveis -------
+;; ------------------------------------------------
+to clean_tasks
+  ask tasks with [completed = false][
+    set responsibleAgent false
+  ]
+  ask uavs [
+    set tasksToDo []
+  ]
+end
+
+  
+  
+
+;; ------------------------------------------------
+;; ---- Carregar lista da agentes não visitados ---
+;; ------------------------------------------------
+to fill-uavs-unvisited
+  set uavs-unvisited []
+  
+  let uavs-disponiveis uavs with [not member? self uavs-no-energy]
+  
+  ;;codigo inserido JUNIER
+  ;;remove um UAV pseudo-aleatoriamente
+ ; let energy random 300
+ ; let limit random 30
+ ; let new_uavs []
+  ;if (tag > 0)[
+   ; if (count-cominicacao mod tag) = 1 [
+     ; ask uavs with [lastX > 100][
+     ;   print lastX
+       ; set uavs-disponiveis remove self uavs-disponiveis
+       ;set uavs-disponiveis uavs-disponiveis with [lastX < 150 and resource > 150]
+        
+  ;     set uavs-disponiveis uavs-disponiveis with [resource < (energy + limit) and resource > (energy - limit)]
+   ;    print energy
+    ;   print limit
+     ;  ask uavs-disponiveis [print resource]
+        ;let agentToRemove uavs with [lastX > 100]
+        ;set uavs-no-energy (turtle-set agentToRemove uavs-no-energy)
+       ; set uavs-disponiveis uavs-disponiveis with [self != myself] 
+ ;     ]
+     ; ask uav (set resource 0)
+     ; set uavs-no-energy lput i uavs-no-energy
+  ;  ] 
+ ; ]
+  ;set uavs-disponiveis uavs with [not member? self uavs-no-energy]
+  ;;FIM
+  
+  
+  ;print word "sem energia: " uavs-no-energy 
+  ;print word "Disponíveis: " uavs-disponiveis
+  
+  ; Carregar os não visitados apenas com os que ainda tem energia disponível  
+  ask uavs-disponiveis  [
+    set uavs-unvisited lput self uavs-unvisited
+  ]
+end
+
+;; ------------------------------------------------
+;; ---- Verificar disponibilidade -----------------
+;; ------------------------------------------------
+to verifica-disponibilidade[i]
+  
+  ;; Verificar se o agente ainda pode continuar na lista para ser carregada no próximo loop
+
+  let quant-tarefas-que-tem-recurso 0
+  ask tasks with [responsibleAgent = false][
+     
+     let qualityia compute_quality i a ;;tasks a
+     
+     if qualityia > 0 [
+       let consumo (rc + compute_distance i self) ;; consumo de recurso da tarefa + recurso locomoção
+       
+       let resource_available ([resource] of i - [estimated_cost] of i) ;; energia disponível no agente
+         if (resource_available > consumo) [
+           set quant-tarefas-que-tem-recurso (quant-tarefas-que-tem-recurso + 1)
+         stop
+         ]
+       
+     ]
+  ]
+  
+  if quant-tarefas-que-tem-recurso = 0 [
+    ;print word "Todos os recursos estão alocados: " i
+    set uavs-no-energy lput i uavs-no-energy
+  ]
+ 
+end
+
+
+;; ------------------------------------------------
+;; ---- Verificar disponibilidade estrela ---------
+;; ------------------------------------------------
+to verifica-disponibilidade-conjunto[agents]
+  
+  let quant-tarefas-que-tem-recurso 0
+  
+  ask agents [
+     
+    let i self
+  
+    ask tasks with [responsibleAgent = false][
+       
+       let qualityia compute_quality i a ;;
+     
+       
+       if qualityia > 0 [
+         let consumo (rc + compute_distance i self) ;; consumo de recurso da tarefa + recurso locomoção
+       
+         let resource_available ([resource] of i - [estimated_cost] of i) ;; energia disponível no agente
+         if (resource_available > consumo) [
+           set quant-tarefas-que-tem-recurso (quant-tarefas-que-tem-recurso + 1)
+         stop
+         ]
+       ]
+    ]
+    if quant-tarefas-que-tem-recurso = 0 [
+      ;print word "Todos os recursos estão alocados: " i
+      set uavs-no-energy lput i uavs-no-energy
+    ]
+     
+  ]
+end
+
+;; ---------------------------------------------
+;; ----------------- Cenário -------------------
+;; ---------------------------------------------
+
+to create-scenario [ x y]
+  ask patches [ set pcolor white ] ;;coloca todos os patches que compoem o cenario com a cor branca
+  ; resize the NetLogo World and set
+  resize-world 0 x 0 y ;Changes the size of the patch grid
+
+  ;resize-world 0 100 0 80
+  ;set-patch-size 5.870
+
+  ;resize-world 0 200 0 160
+  ;set-patch-size 5.870
+
+  ;resize-world 0 300 0 240
+  ;set-patch-size 5.870
+end
+
+to-report recolor [u-type]
+  ifelse u-type = 0 
+     [ report yellow ]
+     [ifelse u-type = 1 
+        [report green] [ifelse u-type = 2 [report blue][report red]]]
+end
+
+
+
+
+to-report list-no-leaders
+
+  report (turtle-set no-leaders uavs with [lider = 0])
+  
+end

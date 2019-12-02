@@ -1,0 +1,63 @@
+;; ---------------------------------------------------
+;; ----- ALGORITMO SWARM-GAP ORIGINAL ----------------
+;; ---------------------------------------------------
+
+
+;; ---------------------------------------------------
+;; ---- Escolha das tarefas ----------
+;; ---------------------------------------------------
+
+;; O agente i (uav) verifica todas as tarefas disponíveis
+;; e calcula a probabilidade de realizar cada uma delas
+
+;; A capacidade precisa ser calculada para cada tarefa... pq é mudada a próxima posição...
+to choose_task[i]
+
+  ;; só para ver os que cada vant pode fazer
+  ;ask tasks [
+  ;  let maxQia compute_quality i a
+  ;  let t self
+  ;  if maxQia > 0 [
+  ;    ask i [ create-link-with t ]
+  ;  ]
+  ;]
+
+  ;; Como ele pode escolher mais de uma tarefa.. existe uma espécia de agendamento: calcula-se o custo estimado e a proxima posição
+  let r ([resource] of i - [estimated_cost] of i) ;; Recursos disponíveis (recursos atuais - consumo previsto com base em tarefas agendadas)
+
+  ;; Tarefas que o agente pode fazer pois:
+  ;; >> a tarefa está disponível, ou seja, não está alocada para nenhum agente
+  ;; >> o agente tem qualidade para realiza-la, ou seja, possui sensor que pode identificar o alvo solicitado pela tarefa
+  let ts tasks with [responsibleAgent = false and compute_quality i a > 0]
+
+  ;ask ts[
+  ;  print self
+  ;  print word "distancia:" compute_distance i self
+  ;]
+  ;foreach sort-by [compute_distance i ?1 < compute_distance i ?2] ts[
+  ;  print ?
+  ;  print word "distancia:" compute_distance i ?
+  ;]
+
+  ;sort-by [item 2 ?1 > item 2 ?2] capabilitys
+
+  ask ts[
+    let j self
+
+    let kij capability i j ts
+    let threshold 1 - kij ;; line 16 Swarm-GAP
+    let T ((s * s) / ((s * s) + (threshold * threshold))) ;; Calculo da tendência
+
+    ;; calcular o recurso necessário para a realização da tarefa (consumo de recurso da tarefa + recurso locomoção do agente até ela)
+    let consumo (rc + compute_distance i j) ;
+
+    let roulette random-float 1
+
+    ;; Verifica se o agente irá ou não fazer a tarefas:
+    if (roulette < T) and (r >= consumo) [
+        allocate i j consumo kij
+        set r (r - consumo)
+    ]
+
+  ]
+end

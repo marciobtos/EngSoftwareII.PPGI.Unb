@@ -1,0 +1,36 @@
+;; Fórmula:
+;;            sj = 1 - ( QACIA / (QTA + 1) )
+;; Onde,
+;; sj    é o estimulo da tarefa j
+;; QACIA é a Quantidade de Agentes Capazes de Identificar o Alvo solicitado pela tarefa
+;; QTA   é a Quantidade Total de Agentes
+;; Obs.: adicionei 1 na quantidade total de agentes para não acontecer de ter estimulo 0 (zero)
+to compute-stimulus
+  let QTA count uavs
+
+  ask tasks [
+    let alvo a
+    let QACIA 0
+
+    ask uavs [
+      let identifica false
+      foreach sensors[
+         let qia item alvo (item ? quality-sensors)
+         if (qia > 0) [
+           set identifica true
+         ]
+      ]
+      if identifica [set QACIA (QACIA + 1)]
+    ]
+
+    let sj (1 - ( QACIA / (QTA + 1) ))
+    set s precision sj 2
+
+    ;show (word "Alvo: " alvo " QACIA:" QACIA " Estimulo: " s)
+    ;set label (word "[a: " alvo "] [s: " s "]")
+    ;set label (word "a: " alvo)
+    set label (word " a: " a " s: " s)
+
+  ]
+
+end

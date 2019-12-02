@@ -1,0 +1,125 @@
+FROM eneiascs/dohko-job-ubuntu:1.0.0
+ENV PYTHONPATH ${PYTHONPATH}:/opt/hylaa:/opt/hyst-1.5/src/hybridpy
+ENV HYPYPATH ${HYPYPATH}:/opt/hyst-1.5/src
+
+RUN apt-get update   
+RUN	apt-get install -y build-essential \
+			libopenblas-dev \
+			git \
+			python-pip \	 
+			unzip \
+			gnuplot 
+RUN	wget http://stanleybak.com/papers/bak2017cav_repeatability.zip -P /opt  
+RUN	unzip /opt/bak2017cav_repeatability.zip -d /opt
+RUN	git clone https://github.com/stanleybak/hylaa /opt/hylaa 
+RUN	wget https://ftp.gnu.org/gnu/glpk/glpk-4.60.tar.gz -P /opt/ 
+RUN	tar -xzvf /opt/glpk-4.60.tar.gz -C /opt 
+#RUN	cd /opt/glpk-4.60 && \
+#	./configure && make && make install &&\
+#	cd /opt/hylaa/hylaa/glpk_interface && \
+#	make
+RUN pip install --upgrade pip
+RUN 	pip install matplotlib \ 
+		scipy \
+		numpy \
+		simpy 
+RUN	wget https://github.com/stanleybak/hyst/archive/v1.5.zip -P /opt
+RUN	unzip /opt/v1.5.zip -d /opt && \ 	
+        python -m py_compile /opt/hyst-1.5/src/hybridpy/hybridpy/tool_hylaa.py && \
+	echo 'backend : Agg' > /usr/local/lib/python2.7/dist-packages/matplotlib/mpl-data/matplotlibrc 
+
+
+COPY run_opt_measurements.py /opt/optimizations/
+COPY warmup.py /opt/optimizations/
+COPY time.py /opt/optimizations/
+COPY run /opt/dohko/job/
+CMD mkdir /netlogo
+COPY c2_approach_change/ /netlogo/
+CMD ["/bin/bash"]
+#FROM java:openjdk-7-jdk
+#MAINTAINER Lisa Stillwell <lisa@renci.org>
+# See https://github.com/NetLogo/NetLogo/wiki/Controlling-API
+
+ENV NETLOGO_HOME /opt/netlogo
+
+# Download and extract NetLogo to /opt/netlogo.
+# RUN wget https://ccl.northwestern.edu/netlogo/5.2.0/netlogo-5.2.0.tar.gz && \
+	# tar xzf netlogo-5.2.0.tar.gz && \
+	# rm netlogo-5.2.0.tar.gz && \
+	# mv netlogo-5.2.0 $NETLOGO_HOME
+RUN wget https://ccl.northwestern.edu/netlogo/5.3.1/NetLogo-5.3.1-64.tgz
+RUN tar xzf NetLogo-5.3.1-64.tgz
+RUN rm NetLogo-5.3.1-64.tgz
+RUN mv netlogo-5.3.1-64 $NETLOGO_HOME
+
+ADD ./netlogo-headless.sh $NETLOGO_HOME/
+RUN chmod 755 $NETLOGO_HOME/netlogo-headless.sh
+
+RUN apt-get install -y unzip
+
+RUN wget "https://iweb.dl.sourceforge.net/project/r-ext/v1.4 for NetLogo 5.3 and R 3.2 and later/r_v1.4_for_NL5.3_R3.2_and_higher.zip"
+RUN unzip r_v1.4_for_NL5.3_R3.2_and_higher.zip -d $NETLOGO_HOME/extensions
+RUN rm r_v1.4_for_NL5.3_R3.2_and_higher.zip
+
+# pathdir extension
+RUN wget https://github.com/cstaelin/Pathdir-Extension/archive/v2.0.0.zip
+RUN unzip v2.0.0.zip
+RUN cd Pathdir-Extension-2.0.0
+#RUN ls -ltrh
+RUN unzip Pathdir-Extension-2.0.0/pathdir.zip -d $NETLOGO_HOME/extensions
+RUN cd / 
+RUN rm -rf v2.0.0.zip Pathdir-Extension-2.0.0
+
+
+# Install R
+RUN useradd docker \
+	&& mkdir /home/docker \
+	&& chown docker:docker /home/docker \
+	&& addgroup docker staff
+
+RUN apt-get update \ 
+	&& apt-get install -y --no-install-recommends \
+		ed \
+		less \
+		locales \
+		vim-tiny \
+		wget \
+		ca-certificates \
+		fonts-texgyre \
+	&& rm -rf /var/lib/apt/lists/*
+
+## Configure default locale, see https://github.com/rocker-org/rocker/issues/19
+RUN echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
+	&& locale-gen en_US.utf8 \
+		&& /usr/sbin/update-locale LANG=en_US.UTF-8
+
+ENV LC_ALL en_US.UTF-8
+ENV LANG en_US.UTF-8
+
+## Use Debian unstable via pinning -- new style via APT::Default-Release
+RUN echo "deb http://http.debian.net/debian sid main" > /etc/apt/sources.list.d/debian-unstable.list \
+	&& echo 'APT::Default-Release;' > /etc/apt/apt.conf.d/default
+
+#ENV R_BASE_VERSION 3.4.0
+ENV R_BASE_VERSION 3.4
+ENV R_HOME /usr/lib/R
+ENV JRI_HOME /usr/local/lib/R/site-library/rJava/jri
+ENV R_LIBS /usr/lib/R/library:/usr/lib/R/site-library:/usr/local/lib/R/site-library
+ENV R_LIBS_SITE /usr/lib/R/library:/usr/lib/R/site-library:/usr/local/lib/R/site-library
+ENV R_LIBS_USER /usr/lib/R/library:/usr/lib/R/site-library:/usr/local/lib/R/site-library
+
+## Now install R and littler, and create a link for littler in /usr/local/bin
+## Also set a default CRAN repo, and make sure littler knows about it too
+# removed: there is no need for this package by now
+
+# install package rJava
+
+
+# For debugging
+#CMD ["/bin/bash"]
+RUN	rm -f /opt/*.zip
+RUN	rm -f /opt/*.gz
+RUN	rm -rf /var/lib/apt/lists/*
+RUN	rm -rf /tmp/*
+
+#ENTRYPOINT ["/opt/netlogo/netlogo-headless.sh"]

@@ -1,0 +1,3 @@
+rem go to the folder where NetLogo.jar is located. Also make sure the same folder contains the lib folder for NetLogo
+cd C:\Program Files \NetLogo 5.2.0 
+java -Xmx1024m -Dfile.encoding=UTF-8 -cp NetLogo.jar org.nlogo.headless.Main --model C:\Users\akaranc\Desktop\Rtrials\NagsHead_bayes_storm.nlogo  --experiment Nags_bayes  --spreadsheet C:\Ayse_Data\discovery_NetLogo\Nags_output.csv 

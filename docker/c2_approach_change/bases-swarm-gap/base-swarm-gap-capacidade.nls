@@ -1,0 +1,41 @@
+;; ---------------------------------------------------
+;; ----- ALGORITMO SWARM-GAP ORIGINAL ----------------
+;; ---------------------------------------------------
+
+
+;; ---------------------------------------------------
+;; ---- Calculo de capacidade ----------
+;; ---------------------------------------------------
+
+to-report capability [i j ts] ; agente tarefa-atual tarefas
+  let maxQ 0 ; Maior qualidade
+  let maxD 0 ; Maior distância
+
+  let qj 0
+  let dj 0
+
+  ;; Primeiro preciso descobrir:(i) A maior distancia; e (ii) A maior qualidade
+  ask ts [
+    let q compute_quality i a      ;; Calcular a qualidade do agente para detectar o alvo solicitado pela tarefa
+    let d compute_distance i self  ;; Calcular distância entre o agente e a tarefa
+
+    if q > maxQ [set maxQ q]
+    if d > maxD [set maxD d]
+
+    if self = j[
+      set qj q
+      set dj d
+    ]
+    ;ifelse self = j[ show word "sou essa" who ][show who ]
+  ]
+
+  ;; Agora que já tenho a maior qualidade e a maior distacia, posso calcular a capacidade do agente i para a tarefa j
+  let kd ( (maxD - dj) / maxD)
+  let kq (1 - ( (maxQ - qj) / maxQ))
+
+  let xa [alpha] of j
+  let xb (1 - [alpha] of j)
+  let kij ((kd * xa) + (kq * xb)) ;; Calcula a capacidade com base na distancia e qualidade, ponderadas pelo alpha da tarefa
+
+  report precision kij 4
+end
