@@ -1,0 +1,70 @@
+Experiment hylaaOptimization {
+
+         Research Hypotheses {
+
+                RH1 {reward LAL = SAL description "Reward for LAL is equals than Reward for SAL" },
+                RH2 {reward LAL = AL description "Reward for LAL is equals than Reward for  AL" },
+				RH3 {messages LAL = SAL description "Messages from LAL is equals than Messages for SAL" },
+                RH4 {messages LAL = AL description "Messages for LAL is equals than Messages for  AL" },
+				RH5 {comptasks LAL = SAL description "Completed tasks for LAL is equals Completed tasks for  SAL" },
+				RH6 {comptasks LAL = AL description "Completed tasks for LAL is equals Completed tasks for  AL" },
+            	RH7 {time LAL = SAL description "Time taken by LAL is equals Time taken for  SAL" },
+				RH8 {time LAL = AL description "Time taken by LAL is equals Time taken by AL" },
+				RH9 {tquality LAL = SAL description "Quality for LAL is equals Quality for SAL" },
+				RH10 {tquality LAL = AL description "Quality for LAL is equals Quality for AL" }
+
+
+
+
+          }
+
+          Experimental Design {
+             runs 20
+
+            }   
+            Dependent Variables {
+              reward { description "Total Reward" scaleType Absolute unit "Reward" instrument rewardInstrument },
+			  messages { description "Messsages" scaleType Absolute unit "Messages" instrument messageInstrument },
+			  comptasks { description "Completed Tasks" scaleType Absolute unit "Comp. Tasks" instrument comptasksInstrument },
+			  time { description "Runtime" scaleType Absolute unit "Seconds" instrument runtimeInstrument },
+			  tquality { description "Quality" scaleType Absolute unit "Quality" instrument tqualityInstrument }
+         }   
+
+          Instruments {
+              rewardInstrument {command  ""  valueExpression "mean_recompensas:"},
+			  messageInstrument {command  ""  valueExpression "mean_mensagens:"},
+			  comptasksInstrument {command  ""  valueExpression "mean_tarefas_concluidas:"},
+			  runtimeInstrument {command  ""  valueExpression "mean_runtime:"},
+			  tqualityInstrument {command  ""  valueExpression "mean_qualidade:"}
+          }
+         Factors {
+                optimization { description "Optimization" scaleType Nominal}
+                }
+
+                Treatments {
+                 LAL description "LAL"   factor optimization parameters {params "swarm-gap-loop-limite.nlogo"}  execution hylaaTool,
+                 SAL description "SAL" factor optimization parameters {params "swarm-gap-loop-ordenado.nlogo"} execution hylaaTool,
+                 AL description "AL" factor optimization parameters {params "swarm-gap-loop_antecipado.nlogo"} execution hylaaTool
+         }
+         Objects {description "Number of steps" scaleType Logarithmic {
+
+        experiment6 {description "9 UAVs and 96 tasks" value "6"  parameters {experiment "experiment6"}}
+
+
+            }
+
+         }
+        Executions {
+            hylaaTool {
+                   command "/opt/netlogo/netlogo-headless.sh --model /netlogo/${treatment.parameter.params} --experiment ${object.parameter.experiment} --spreadsheet sv.csv"
+                   timeout 60000
+
+                }
+
+        }
+   Infrastructure {
+            user{
+                    username "vagrant"
+                }
+   }
+}
